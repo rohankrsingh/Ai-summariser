@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, MessageSquare, BookOpen, Share2, Copy, Check } from 'lucide-react';
-import { Button } from './Button';
+import { Send, MessageSquare, BookOpen, Copy, Check } from 'lucide-react';
 import { chatWithContent } from '../services/gemini';
 import { cn } from '../lib/utils';
 
@@ -155,7 +154,7 @@ export function SummaryResult({ summary, sourceType }: SummaryResultProps) {
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSend();
               }}
               placeholder="Ask a question..."

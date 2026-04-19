@@ -80,7 +80,7 @@ export function FileUploader({
               type="text" 
               placeholder="https://youtube.com/watch?v=..." 
               className="flex-1 bg-white border border-border rounded-lg px-4 py-3 text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all shadow-sm"
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') onUrlSubmit((e.target as HTMLInputElement).value);
               }}
             />
