@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '../lib/utils';
 import { SummaryStyle, SummaryLength } from '../services/gemini';
-import { Settings2, BarChart3, ListFilter } from 'lucide-react';
+import { BarChart3, ListFilter } from 'lucide-react';
 
 interface SummaryConfigProps {
   style: SummaryStyle;
@@ -25,9 +25,9 @@ export function SummaryConfig({ style, setStyle, length, setLength }: SummaryCon
   ];
 
   return (
-    <div className="flex flex-col md:flex-row gap-8 p-6 bg-white rounded-xl border border-border card-shadow">
+    <div className="flex flex-col gap-8 rounded-xl border border-border bg-card p-6 md:flex-row">
       <div className="flex-1 space-y-4">
-        <label className="flex items-center gap-2 text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">
+        <label className="flex items-center gap-2 pl-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           <ListFilter className="w-3.5 h-3.5" />
           Output Format
         </label>
@@ -37,10 +37,10 @@ export function SummaryConfig({ style, setStyle, length, setLength }: SummaryCon
               key={s.id}
               onClick={() => setStyle(s.id)}
               className={cn(
-                "px-4 py-2 rounded-lg text-sm font-semibold transition-all border",
-                style === s.id 
-                  ? "bg-blue-50 border-accent text-accent" 
-                  : "bg-white border-border text-text-secondary hover:border-slate-300 hover:text-text-primary"
+                'rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
+                style === s.id
+                  ? 'border-primary/40 bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-muted',
               )}
             >
               {s.label}
@@ -52,7 +52,7 @@ export function SummaryConfig({ style, setStyle, length, setLength }: SummaryCon
       <div className="w-px bg-border hidden md:block" />
 
       <div className="flex-1 space-y-4">
-        <label className="flex items-center gap-2 text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">
+        <label className="flex items-center gap-2 pl-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           <BarChart3 className="w-3.5 h-3.5" />
           Detail Density
         </label>
@@ -62,10 +62,10 @@ export function SummaryConfig({ style, setStyle, length, setLength }: SummaryCon
               key={l.id}
               onClick={() => setLength(l.id)}
               className={cn(
-                "px-4 py-2 rounded-lg text-sm font-semibold transition-all border",
-                length === l.id 
-                  ? "bg-blue-50 border-accent text-accent" 
-                  : "bg-white border-border text-text-secondary hover:border-slate-300 hover:text-text-primary"
+                'rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
+                length === l.id
+                  ? 'border-primary/40 bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-muted',
               )}
             >
               {l.label}

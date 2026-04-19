@@ -1,28 +1,52 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  BookOpenCheck,
+  Download,
+  Eye,
+  EyeOff,
   FileText,
-  History,
+  FolderSync,
+  KeyRound,
   MessageSquare,
   Music,
   Sparkles,
   Terminal,
-  Youtube,
-  FolderSync,
-  WandSparkles,
-  BookOpenCheck,
-  Download,
   Trash2,
+  WandSparkles,
+  Youtube,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription, AlertTitle } from './components/reui/alert';
+import { Badge } from './components/reui/badge';
+import {
+  Frame,
+  FrameDescription,
+  FrameHeader,
+  FramePanel,
+  FrameTitle,
+} from './components/reui/frame';
 import { FileUploader } from './components/FileUploader';
 import { SummaryConfig } from './components/SummaryConfig';
 import { SummaryResult } from './components/SummaryResult';
 import { Button } from './components/Button';
-import { hasGeminiApiKey, summarizeContent, SummaryLength, SummaryStyle } from './services/gemini';
 import { cn } from './lib/utils';
+import {
+  clearRuntimeGeminiApiKey,
+  getGeminiApiKeySource,
+  hasGeminiApiKey,
+  loadRuntimeGeminiApiKey,
+  setRuntimeGeminiApiKey,
+  summarizeContent,
+  SummaryLength,
+  SummaryStyle,
+} from './services/gemini';
 
 type SourceType = 'pdf' | 'audio' | 'youtube' | 'text' | null;
 type WorkspaceView = 'workspace' | 'history';
+type ApiKeySource = ReturnType<typeof getGeminiApiKeySource>;
 
 interface HistoryEntry {
   id: number;
@@ -34,11 +58,36 @@ interface HistoryEntry {
   length: SummaryLength;
 }
 
-const SOURCE_OPTIONS: { id: Exclude<SourceType, null>; label: string; icon: React.ElementType; hint: string }[] = [
-  { id: 'youtube', label: 'YouTube Video', icon: Youtube, hint: 'Paste a link and summarize the transcript/story' },
-  { id: 'pdf', label: 'PDF Document', icon: FileText, hint: 'Upload reports, notes, and long PDFs quickly' },
-  { id: 'audio', label: 'Audio Recording', icon: Music, hint: 'Convert voice/audio to concise takeaways' },
-  { id: 'text', label: 'Plain Text', icon: MessageSquare, hint: 'Drop raw content and extract key points' },
+const SOURCE_OPTIONS: {
+  id: Exclude<SourceType, null>;
+  label: string;
+  icon: React.ElementType;
+  hint: string;
+}[] = [
+  {
+    id: 'youtube',
+    label: 'YouTube Video',
+    icon: Youtube,
+    hint: 'Paste a link and summarize the transcript/story',
+  },
+  {
+    id: 'pdf',
+    label: 'PDF Document',
+    icon: FileText,
+    hint: 'Upload reports, notes, and long PDFs quickly',
+  },
+  {
+    id: 'audio',
+    label: 'Audio Recording',
+    icon: Music,
+    hint: 'Convert voice/audio to concise takeaways',
+  },
+  {
+    id: 'text',
+    label: 'Plain Text',
+    icon: MessageSquare,
+    hint: 'Drop raw content and extract key points',
+  },
 ];
 
 const STARTER_TEMPLATES = [
@@ -68,9 +117,18 @@ export default function App() {
   const [length, setLength] = useState<SummaryLength>('medium');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  const hasApiKey = useMemo(() => hasGeminiApiKey(), []);
+  const [hasApiKey, setHasApiKey] = useState(() => hasGeminiApiKey());
+  const [apiKeySource, setApiKeySource] = useState<ApiKeySource>(() => getGeminiApiKeySource());
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyNotice, setApiKeyNotice] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  const refreshApiKeyStatus = () => {
+    setHasApiKey(hasGeminiApiKey());
+    setApiKeySource(getGeminiApiKeySource());
+  };
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('aura_history');
       if (!saved) return;
@@ -84,11 +142,22 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const runtimeKey = loadRuntimeGeminiApiKey();
+    if (runtimeKey) {
+      setApiKeyInput(runtimeKey);
+    }
+    refreshApiKeyStatus();
+  }, []);
+
   const stats = useMemo(() => {
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
-    const thisWeek = history.filter((entry) => now - new Date(entry.date).getTime() <= sevenDaysMs).length;
+    const thisWeek = history.filter(
+      (entry) => now - new Date(entry.date).getTime() <= sevenDaysMs,
+    ).length;
     const totalChars = history.reduce((acc, item) => acc + item.result.length, 0);
+
     return {
       total: history.length,
       thisWeek,
@@ -121,17 +190,42 @@ export default function App() {
   };
 
   const canProcess =
+    hasApiKey &&
     !isProcessing &&
     ((sourceType === 'text' && rawText.trim().length > 0) ||
       (sourceType === 'youtube' && selectedUrl.trim().length > 0) ||
       ((sourceType === 'pdf' || sourceType === 'audio') && Boolean(selectedFile)));
 
-  const handleProcess = async () => {
-    if (!canProcess || !sourceType) return;
-    if (!hasApiKey) {
-      setError('Gemini API key missing. Add it to .env.local, then restart with npm run dev.');
+  const handleSaveApiKey = () => {
+    const normalized = apiKeyInput.trim();
+    if (!normalized) {
+      setApiKeyNotice('Enter a Gemini API key before saving.');
       return;
     }
+
+    setRuntimeGeminiApiKey(normalized);
+    setApiKeyInput(normalized);
+    refreshApiKeyStatus();
+    setApiKeyNotice('Runtime API key saved in this browser.');
+    setError(null);
+  };
+
+  const handleClearApiKey = () => {
+    clearRuntimeGeminiApiKey();
+    setApiKeyInput('');
+    refreshApiKeyStatus();
+    setError(null);
+
+    if (getGeminiApiKeySource() === 'environment') {
+      setApiKeyNotice('Runtime key cleared. Falling back to .env.local key.');
+      return;
+    }
+
+    setApiKeyNotice('Runtime key cleared. Add a key to enable AI actions.');
+  };
+
+  const handleProcess = async () => {
+    if (!canProcess || !sourceType) return;
 
     setIsProcessing(true);
     setError(null);
@@ -164,7 +258,8 @@ export default function App() {
       saveToHistory(sourceType, sourceLabel, finalSummary, style, length);
     } catch (processError) {
       console.error(processError);
-      const message = processError instanceof Error ? processError.message : 'Unknown processing error.';
+      const message =
+        processError instanceof Error ? processError.message : 'Unknown processing error.';
       setError(`Analysis failed: ${message}`);
     } finally {
       setIsProcessing(false);
@@ -220,216 +315,330 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-text-primary">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 lg:flex-row lg:gap-6 lg:p-6">
-        <aside className="glass-panel w-full rounded-2xl border border-border/70 p-4 lg:w-80 lg:p-5">
-          <div className="mb-6 flex items-center gap-3 px-1">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white shadow-lg shadow-teal-700/20">
-              <WandSparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="font-display text-lg font-bold tracking-tight">Summora</h1>
-              <p className="text-xs text-text-secondary">Personal AI Summary Workspace</p>
-            </div>
-          </div>
+        <aside className="w-full lg:w-80">
+          <Frame spacing="sm">
+            <FramePanel>
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                  <WandSparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h1 className="font-heading text-lg font-bold tracking-tight">Summora</h1>
+                  <p className="text-xs text-muted-foreground">Personal AI Summary Workspace</p>
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            {[
-              { id: 'workspace', label: 'Workspace', icon: Sparkles },
-              { id: 'history', label: 'History', icon: History },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setView(item.id as WorkspaceView)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all',
-                  view === item.id
-                    ? 'bg-accent text-white shadow-md shadow-teal-700/20'
-                    : 'text-text-secondary hover:bg-white hover:text-text-primary',
-                )}
+              <Tabs
+                value={view}
+                onValueChange={(value) => setView(value as WorkspaceView)}
+                className="mb-5"
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </div>
+                <TabsList className="w-full">
+                  <TabsTrigger value="workspace" className="flex-1">
+                    Workspace
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="flex-1">
+                    History
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-          {view === 'workspace' && (
-            <div className="mt-7 space-y-2">
-              <p className="px-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Input Channel</p>
-              {SOURCE_OPTIONS.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSourceType(item.id);
-                    setSummary(null);
-                    setError(null);
-                  }}
-                  className={cn(
-                    'group w-full rounded-xl border px-3 py-3 text-left transition-all',
-                    sourceType === item.id
-                      ? 'border-accent bg-white shadow-sm shadow-teal-600/10'
-                      : 'border-transparent bg-transparent hover:border-border hover:bg-white',
-                  )}
-                >
-                  <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-text-primary">
-                    <item.icon className="h-4 w-4 text-accent" />
-                    {item.label}
+              {view === 'workspace' && (
+                <div className="space-y-2">
+                  <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Input Channel
+                  </p>
+                  {SOURCE_OPTIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setSourceType(item.id);
+                        setSummary(null);
+                        setError(null);
+                      }}
+                      className={cn(
+                        'group w-full rounded-xl border px-3 py-3 text-left transition-all',
+                        sourceType === item.id
+                          ? 'border-primary/40 bg-muted'
+                          : 'border-transparent bg-transparent hover:border-border hover:bg-muted/60',
+                      )}
+                    >
+                      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <item.icon className="h-4 w-4 text-primary" />
+                        {item.label}
+                        {sourceType === item.id && (
+                          <Badge variant="success-light" size="sm" className="ml-auto">
+                            Active
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{item.hint}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <Frame className="mt-5" spacing="xs">
+                <FramePanel>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold text-foreground">API Settings</p>
+                    </div>
+                    {apiKeySource === 'runtime' && (
+                      <Badge variant="success-light" size="sm">
+                        Runtime
+                      </Badge>
+                    )}
+                    {apiKeySource === 'environment' && (
+                      <Badge variant="info-light" size="sm">
+                        .env.local
+                      </Badge>
+                    )}
+                    {!apiKeySource && (
+                      <Badge variant="warning-light" size="sm">
+                        Missing
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-xs text-text-secondary">{item.hint}</p>
-                </button>
-              ))}
-            </div>
-          )}
 
-          <div className="mt-7 rounded-xl border border-border bg-white/80 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-text-secondary">
-              <Terminal className="h-3.5 w-3.5" />
-              Workspace Health
-            </div>
-            <p className="text-sm font-medium text-text-primary">
-              {hasApiKey ? 'Gemini API key detected.' : 'API key not found in .env.local.'}
-            </p>
-          </div>
+                  <div className="relative">
+                    <Input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="Paste Gemini API key (AIza...)"
+                      value={apiKeyInput}
+                      onChange={(event) => {
+                        setApiKeyInput(event.target.value);
+                        if (apiKeyNotice) setApiKeyNotice(null);
+                      }}
+                      className="bg-background pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((prev) => !prev)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted"
+                      aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                    >
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button variant="secondary" size="sm" onClick={handleSaveApiKey}>
+                      {apiKeySource === 'runtime' ? 'Update Key' : 'Save Key'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearApiKey}
+                      disabled={apiKeySource !== 'runtime'}
+                    >
+                      Clear Runtime Key
+                    </Button>
+                  </div>
+
+                  <Alert variant={hasApiKey ? 'success' : 'warning'} className="mt-3">
+                    <Terminal className="h-4 w-4" />
+                    <AlertTitle>Key Status</AlertTitle>
+                    <AlertDescription>
+                      <p>
+                        {hasApiKey
+                          ? apiKeySource === 'runtime'
+                            ? 'Using runtime key saved in this browser.'
+                            : 'Using environment key from .env.local.'
+                          : 'No Gemini API key configured yet.'}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+
+                  {apiKeyNotice && (
+                    <p className="mt-2 text-xs text-muted-foreground">{apiKeyNotice}</p>
+                  )}
+                </FramePanel>
+              </Frame>
+            </FramePanel>
+          </Frame>
         </aside>
 
         <main className="flex-1 space-y-4">
-          <header className="glass-panel rounded-2xl border border-border/70 px-5 py-4 lg:px-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-bold tracking-tight">{view === 'workspace' ? 'Workspace' : 'Summary History'}</h2>
-                <p className="text-sm text-text-secondary">
-                  {view === 'workspace'
-                    ? 'Summarize faster with consistent output styles and instant follow-up chat.'
-                    : 'Your recent summaries stay local in browser storage for personal use.'}
-                </p>
+          <Frame spacing="sm">
+            <FrameHeader>
+              <FrameTitle className="font-heading text-2xl font-bold tracking-tight">
+                {view === 'workspace' ? 'Workspace' : 'Summary History'}
+              </FrameTitle>
+              <FrameDescription>
+                {view === 'workspace'
+                  ? 'Summarize faster with consistent output styles and instant follow-up chat.'
+                  : 'Your recent summaries stay local in browser storage for personal use.'}
+              </FrameDescription>
+            </FrameHeader>
+            <FramePanel>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl border border-border bg-background px-3 py-2">
+                  <p className="text-lg font-bold text-foreground">{stats.total}</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total</p>
+                </div>
+                <div className="rounded-xl border border-border bg-background px-3 py-2">
+                  <p className="text-lg font-bold text-foreground">{stats.thisWeek}</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">This Week</p>
+                </div>
+                <div className="rounded-xl border border-border bg-background px-3 py-2">
+                  <p className="text-lg font-bold text-foreground">{stats.avgSize}</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Avg Chars</p>
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center lg:min-w-[340px]">
-                <div className="rounded-xl border border-border bg-white px-3 py-2">
-                  <p className="text-lg font-bold text-text-primary">{stats.total}</p>
-                  <p className="text-[11px] uppercase tracking-wider text-text-secondary">Total</p>
-                </div>
-                <div className="rounded-xl border border-border bg-white px-3 py-2">
-                  <p className="text-lg font-bold text-text-primary">{stats.thisWeek}</p>
-                  <p className="text-[11px] uppercase tracking-wider text-text-secondary">This Week</p>
-                </div>
-                <div className="rounded-xl border border-border bg-white px-3 py-2">
-                  <p className="text-lg font-bold text-text-primary">{stats.avgSize}</p>
-                  <p className="text-[11px] uppercase tracking-wider text-text-secondary">Avg Chars</p>
-                </div>
-              </div>
-            </div>
-          </header>
+            </FramePanel>
+          </Frame>
 
           {view === 'workspace' ? (
             <div className="space-y-4">
               {!summary ? (
                 <>
-                  {!hasApiKey && (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      Add <code className="font-mono font-semibold">VITE_GEMINI_API_KEY</code> to{' '}
-                      <code className="font-mono font-semibold">.env.local</code>, then restart <code className="font-mono font-semibold">npm run dev</code>.
-                    </div>
-                  )}
-
                   <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl border border-border bg-white p-4">
-                      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-accent">
-                        <BookOpenCheck className="h-4 w-4" />
-                      </div>
-                      <p className="font-semibold text-text-primary">Structured Summaries</p>
-                      <p className="text-sm text-text-secondary">Choose bullet points, prose, executive notes, or action items.</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-white p-4">
-                      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
-                        <FolderSync className="h-4 w-4" />
-                      </div>
-                      <p className="font-semibold text-text-primary">Reusable History</p>
-                      <p className="text-sm text-text-secondary">Open any previous output and keep asking follow-up questions.</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-white p-4">
-                      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                        <Sparkles className="h-4 w-4" />
-                      </div>
-                      <p className="font-semibold text-text-primary">Personal Workflow</p>
-                      <p className="text-sm text-text-secondary">Built for solo use with local history and markdown export.</p>
-                    </div>
+                    <Frame>
+                      <FramePanel>
+                        <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <BookOpenCheck className="h-4 w-4" />
+                        </div>
+                        <p className="font-semibold text-foreground">Structured Summaries</p>
+                        <p className="text-sm text-muted-foreground">
+                          Choose bullet points, prose, executive notes, or action items.
+                        </p>
+                      </FramePanel>
+                    </Frame>
+                    <Frame>
+                      <FramePanel>
+                        <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-info/10 text-info-foreground">
+                          <FolderSync className="h-4 w-4" />
+                        </div>
+                        <p className="font-semibold text-foreground">Reusable History</p>
+                        <p className="text-sm text-muted-foreground">
+                          Open any previous output and keep asking follow-up questions.
+                        </p>
+                      </FramePanel>
+                    </Frame>
+                    <Frame>
+                      <FramePanel>
+                        <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success-foreground">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <p className="font-semibold text-foreground">Personal Workflow</p>
+                        <p className="text-sm text-muted-foreground">
+                          Built for solo use with local history and markdown export.
+                        </p>
+                      </FramePanel>
+                    </Frame>
                   </div>
 
                   {!sourceType ? (
-                    <div className="rounded-2xl border border-border bg-white p-5">
-                      <p className="mb-4 text-sm font-semibold text-text-primary">Pick a starter template (optional)</p>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {STARTER_TEMPLATES.map((template) => (
-                          <button
-                            key={template.title}
-                            onClick={() => {
-                              setSourceType('text');
-                              setRawText(template.value);
-                            }}
-                            className="rounded-xl border border-border p-4 text-left transition hover:border-accent hover:bg-teal-50/40"
-                          >
-                            <p className="mb-1 font-semibold text-text-primary">{template.title}</p>
-                            <p className="line-clamp-3 text-sm text-text-secondary">{template.value}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <Frame>
+                      <FramePanel>
+                        <p className="mb-4 text-sm font-semibold text-foreground">
+                          Pick a starter template (optional)
+                        </p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {STARTER_TEMPLATES.map((template) => (
+                            <button
+                              key={template.title}
+                              onClick={() => {
+                                setSourceType('text');
+                                setRawText(template.value);
+                              }}
+                              className="rounded-xl border border-border p-4 text-left transition hover:border-primary/40 hover:bg-muted"
+                            >
+                              <p className="mb-1 font-semibold text-foreground">{template.title}</p>
+                              <p className="line-clamp-3 text-sm text-muted-foreground">{template.value}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </FramePanel>
+                    </Frame>
                   ) : (
                     <>
-                      <div className="rounded-2xl border border-border bg-white p-5">
-                        <div className="mb-4 flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-text-secondary">Selected Input</p>
-                            <p className="text-sm font-semibold text-text-primary capitalize">{sourceType}</p>
+                      <Frame>
+                        <FramePanel>
+                          <div className="mb-4 flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                Selected Input
+                              </p>
+                              <p className="text-sm font-semibold capitalize text-foreground">
+                                {sourceType}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSourceType(null);
+                                setSelectedFile(null);
+                                setSelectedUrl('');
+                                setRawText('');
+                              }}
+                            >
+                              Change
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSourceType(null);
-                              setSelectedFile(null);
-                              setSelectedUrl('');
-                              setRawText('');
-                            }}
-                          >
-                            Change
-                          </Button>
-                        </div>
 
-                        {sourceType === 'text' ? (
-                          <textarea
-                            placeholder="Paste any long text here..."
-                            value={rawText}
-                            onChange={(event) => setRawText(event.target.value)}
-                            className="h-44 w-full rounded-xl border border-border bg-slate-50 px-4 py-3 text-sm text-text-primary outline-none transition focus:border-accent focus:bg-white"
-                          />
-                        ) : (
-                          <FileUploader
-                            type={sourceType}
-                            selectedFile={selectedFile}
-                            selectedUrl={selectedUrl}
-                            onFileSelect={setSelectedFile}
-                            onUrlSubmit={setSelectedUrl}
-                            onClear={() => {
-                              setSelectedFile(null);
-                              setSelectedUrl('');
-                            }}
-                          />
-                        )}
+                          {sourceType === 'text' ? (
+                            <Textarea
+                              placeholder="Paste any long text here..."
+                              value={rawText}
+                              onChange={(event) => setRawText(event.target.value)}
+                              className="min-h-44 bg-muted/40"
+                            />
+                          ) : (
+                            <FileUploader
+                              type={sourceType}
+                              selectedFile={selectedFile}
+                              selectedUrl={selectedUrl}
+                              onFileSelect={setSelectedFile}
+                              onUrlSubmit={setSelectedUrl}
+                              onClear={() => {
+                                setSelectedFile(null);
+                                setSelectedUrl('');
+                              }}
+                            />
+                          )}
 
-                        <div className="mt-5 flex justify-end">
-                          <Button onClick={handleProcess} isLoading={isProcessing} size="lg" disabled={!canProcess}>
-                            Generate Summary
-                          </Button>
-                        </div>
-                      </div>
+                          <div className="mt-5 flex flex-col items-end gap-2">
+                            <Button
+                              onClick={handleProcess}
+                              isLoading={isProcessing}
+                              size="lg"
+                              disabled={!canProcess}
+                            >
+                              Generate Summary
+                            </Button>
+                            {!hasApiKey && (
+                              <p className="text-xs text-muted-foreground">
+                                Configure an API key in sidebar settings to enable generation.
+                              </p>
+                            )}
+                          </div>
+                        </FramePanel>
+                      </Frame>
 
-                      <SummaryConfig style={style} setStyle={setStyle} length={length} setLength={setLength} />
+                      <SummaryConfig
+                        style={style}
+                        setStyle={setStyle}
+                        length={length}
+                        setLength={setLength}
+                      />
                     </>
                   )}
 
-                  {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+                  {error && (
+                    <Alert variant="destructive">
+                      <Terminal className="h-4 w-4" />
+                      <AlertTitle>Analysis Failed</AlertTitle>
+                      <AlertDescription>
+                        <p className="whitespace-pre-wrap break-words">{error}</p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </>
               ) : (
                 <div className="space-y-4">
@@ -442,6 +651,9 @@ export default function App() {
                       <Download className="mr-1 h-4 w-4" />
                       Export Markdown
                     </Button>
+                    <Badge variant="info-light" size="default">
+                      Tailwind v4 + ReUI
+                    </Badge>
                   </div>
 
                   <SummaryResult summary={summary} sourceType={sourceType || 'content'} />
@@ -449,44 +661,48 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-border bg-white p-5">
-              <div className="mb-5 flex items-center justify-between">
-                <p className="font-semibold text-text-primary">Recent Summaries</p>
-                {history.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearHistory}>
-                    <Trash2 className="mr-1 h-4 w-4" />
-                    Clear
-                  </Button>
-                )}
-              </div>
+            <Frame>
+              <FramePanel>
+                <div className="mb-5 flex items-center justify-between">
+                  <p className="font-semibold text-foreground">Recent Summaries</p>
+                  {history.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearHistory}>
+                      <Trash2 className="mr-1 h-4 w-4" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
 
-              {history.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
-                  No history yet. Generate your first summary from the Workspace tab.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {history.map((entry) => (
-                    <button
-                      key={entry.id}
-                      onClick={() => loadFromHistory(entry)}
-                      className="w-full rounded-xl border border-border p-4 text-left transition hover:border-accent hover:bg-teal-50/30"
-                    >
-                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold uppercase tracking-wide">
-                          {entry.type}
-                        </span>
-                        <span>{new Date(entry.date).toLocaleString()}</span>
-                        <span>Style: {entry.style}</span>
-                        <span>Length: {entry.length}</span>
-                      </div>
-                      <p className="mb-1 line-clamp-1 font-semibold text-text-primary">{entry.source}</p>
-                      <p className="line-clamp-2 text-sm text-text-secondary">{entry.result}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {history.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
+                    No history yet. Generate your first summary from the Workspace tab.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {history.map((entry) => (
+                      <button
+                        key={entry.id}
+                        onClick={() => loadFromHistory(entry)}
+                        className="w-full rounded-xl border border-border p-4 text-left transition hover:border-primary/40 hover:bg-muted"
+                      >
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline" size="sm" radius="full" className="uppercase">
+                            {entry.type}
+                          </Badge>
+                          <span>{new Date(entry.date).toLocaleString()}</span>
+                          <span>Style: {entry.style}</span>
+                          <span>Length: {entry.length}</span>
+                        </div>
+                        <p className="mb-1 line-clamp-1 font-semibold text-foreground">
+                          {entry.source}
+                        </p>
+                        <p className="line-clamp-2 text-sm text-muted-foreground">{entry.result}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </FramePanel>
+            </Frame>
           )}
         </main>
       </div>

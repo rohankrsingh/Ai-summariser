@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import { Send, MessageSquare, BookOpen, Copy, Check } from 'lucide-react';
 import { chatWithContent } from '../services/gemini';
 import { cn } from '../lib/utils';
+import { Input } from '@/components/ui/input';
+import { Button } from './Button';
 
 interface Message {
   role: 'user' | 'model';
@@ -32,24 +34,34 @@ export function SummaryResult({ summary, sourceType }: SummaryResultProps) {
 
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setIsTyping(true);
 
     try {
       const history = [
-        { role: 'user' as const, parts: [{ text: `Here is the summary of the ${sourceType}: ${summary}` }] },
-        { role: 'model' as const, parts: [{ text: "I have analyzed the content. How can I help you today?" }] },
-        ...messages.map(m => ({
+        {
+          role: 'user' as const,
+          parts: [{ text: `Here is the summary of the ${sourceType}: ${summary}` }],
+        },
+        {
+          role: 'model' as const,
+          parts: [{ text: 'I have analyzed the content. How can I help you today?' }],
+        },
+        ...messages.map((m) => ({
           role: m.role,
-          parts: [{ text: m.content }]
-        }))
+          parts: [{ text: m.content }],
+        })),
       ];
 
       const response = await chatWithContent(history, userMessage);
-      setMessages(prev => [...prev, { role: 'model', content: response || "I'm sorry, I couldn't generate a response." }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'model', content: response || "I'm sorry, I couldn't generate a response." },
+      ]);
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'model', content: "Error: Could not connect to the AI service." }]);
+      const message = error instanceof Error ? error.message : 'Could not connect to the AI service.';
+      setMessages((prev) => [...prev, { role: 'model', content: `Error: ${message}` }]);
     } finally {
       setIsTyping(false);
     }
@@ -62,18 +74,20 @@ export function SummaryResult({ summary, sourceType }: SummaryResultProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full min-h-[600px] animate-in slide-in-from-bottom-8 duration-700">
+    <div className="grid h-full min-h-[600px] grid-cols-1 gap-4 lg:grid-cols-2">
       {/* Summary View */}
-      <div className="flex flex-col bg-white rounded-2xl border border-border overflow-hidden card-shadow">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-white sticky top-0 z-10">
+      <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-5 py-4">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-accent" />
-            <span className="text-sm font-bold text-text-primary uppercase tracking-wider">Executive Summary</span>
+            <BookOpen className="w-4 h-4 text-primary" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Executive Summary
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={copyToClipboard}
-              className="text-xs font-semibold text-accent hover:underline flex items-center gap-1.5"
+              className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? 'Copied' : 'Copy to Clipboard'}
@@ -85,56 +99,64 @@ export function SummaryResult({ summary, sourceType }: SummaryResultProps) {
             <ReactMarkdown>{summary}</ReactMarkdown>
           </div>
         </div>
-        <div className="p-6 border-t border-border bg-slate-50/50 flex flex-wrap gap-2">
-           <span className="px-2 py-1 bg-slate-200 rounded text-[10px] font-bold text-slate-600 uppercase tracking-tight">Extracted</span>
-           <span className="px-2 py-1 bg-slate-200 rounded text-[10px] font-bold text-slate-600 uppercase tracking-tight">AI Verified</span>
+        <div className="flex flex-wrap gap-2 border-t border-border bg-muted/40 p-4">
+          <span className="rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Extracted
+          </span>
+          <span className="rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            AI Verified
+          </span>
         </div>
       </div>
 
       {/* Chat Interface */}
-      <div className="flex flex-col bg-white rounded-2xl border border-border overflow-hidden h-full card-shadow">
-        <div className="px-6 py-4 border-b border-border bg-white flex items-center justify-between">
+      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border bg-card px-5 py-4">
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-indigo-500" />
-            <span className="text-sm font-bold text-text-primary uppercase tracking-wider">Insights & Chat</span>
+            <MessageSquare className="w-4 h-4 text-primary" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Insights and Chat
+            </span>
           </div>
-          <div className="status-badge flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active</span>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-success" />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-success-foreground">
+              Active
+            </span>
           </div>
         </div>
 
-        <div 
+        <div
           ref={scrollRef}
-          className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar bg-white"
+          className="custom-scrollbar flex-1 space-y-6 overflow-y-auto bg-card p-6"
         >
           {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm">
-                <MessageSquare className="w-6 h-6 text-slate-300" />
+            <div className="flex h-full flex-col items-center justify-center space-y-4 p-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-muted">
+                <MessageSquare className="w-6 h-6 text-muted-foreground" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-text-primary font-bold">In-depth Analysis</h3>
-                <p className="text-xs text-text-secondary max-w-[200px] leading-relaxed">
+                <h3 className="font-semibold text-foreground">In-depth Analysis</h3>
+                <p className="text-xs text-muted-foreground max-w-[200px] leading-relaxed">
                   Ask me questions about specific insights, themes, or metrics from the content.
                 </p>
               </div>
             </div>
           )}
           {messages.map((m, i) => (
-            <div 
-              key={i} 
+            <div
+              key={i}
               className={cn(
-                "flex flex-col max-w-[90%]",
-                m.role === 'user' ? "ml-auto items-end" : "items-start"
+                'flex max-w-[90%] flex-col',
+                m.role === 'user' ? 'ml-auto items-end' : 'items-start',
               )}
             >
-              <div 
+              <div
                 className={cn(
-                  "p-3.5 rounded-2xl text-[13px] leading-relaxed shadow-sm",
-                  m.role === 'user' 
-                    ? "bg-accent text-white rounded-tr-none" 
-                    : "bg-slate-50 text-text-primary rounded-tl-none border border-border"
+                  'rounded-2xl p-3.5 text-[13px] leading-relaxed',
+                  m.role === 'user'
+                    ? 'rounded-tr-none bg-primary text-primary-foreground'
+                    : 'rounded-tl-none border border-border bg-muted text-foreground',
                 )}
               >
                 {m.content}
@@ -142,31 +164,32 @@ export function SummaryResult({ summary, sourceType }: SummaryResultProps) {
             </div>
           ))}
           {isTyping && (
-            <div className="flex items-center gap-2 text-text-secondary italic text-[11px] font-medium pl-1">
+            <div className="pl-1 text-[11px] italic text-muted-foreground">
               Analyzing source data...
             </div>
           )}
         </div>
 
-        <div className="p-4 bg-white border-t border-border">
+        <div className="border-t border-border bg-card p-4">
           <div className="relative flex gap-2">
-            <input 
-              type="text" 
+            <Input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSend();
               }}
               placeholder="Ask a question..."
-              className="flex-1 bg-slate-50 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-slate-400 focus:bg-white focus:border-accent outline-none transition-all"
+              className="h-10 flex-1"
             />
-            <button 
+            <Button
               onClick={handleSend}
+              size="md"
               disabled={!input.trim() || isTyping}
-              className="px-4 bg-accent hover:bg-blue-600 text-white rounded-xl transition-all disabled:opacity-50 shadow-sm shadow-blue-500/10 flex items-center justify-center"
+              className="h-10 px-4"
             >
               <Send className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>
